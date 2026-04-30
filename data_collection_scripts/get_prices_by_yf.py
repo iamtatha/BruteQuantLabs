@@ -39,8 +39,8 @@ def nifty_list(v=50):
     return nifty_list_tickers
 
 
-nifty_list_tickers = nifty_list(500)
 
+nifty_list_tickers = nifty_list(500)
 fetch_or_load_stock_price(
     tickers=nifty_list_tickers,
     period=period,
