@@ -12,22 +12,37 @@ from data_collection_scripts.utils.yf import fetch_or_load_stock_price
 
 
 # tickers= ["RELIANCE.NS", "ITC.NS"]
-# tickers= ["TCS.NS"]
 # tickers = ["HDFCBANK.NS"]
+# tickers= ["ACC.NS", "TCS.NS"]
+
+# period = "1mo"
+# interval = "1d"
+
+# fetch_or_load_stock_price(
+#     tickers=tickers,
+#     period=period,
+#     interval=interval
+# )
+
+
+
 
 period = "max"
 interval = "1d"
 
 
-nifty_50 = pd.read_csv("database/csv_data/nifty_50.csv")
-# print(nifty_50.head())
+def nifty_list(v=50):
+    nifty_list = pd.read_csv(f"database/csv_data/nifty_{v}.csv")
 
-nifty_50_tickers = nifty_50["YF_TICKER"].tolist()
-print(nifty_50_tickers)
+    nifty_list_tickers = nifty_list["YF_TICKER"].tolist()
+    print(f"nifty_{v}_tickers: {nifty_list_tickers}")
+    return nifty_list_tickers
 
+
+nifty_list_tickers = nifty_list(500)
 
 fetch_or_load_stock_price(
-    tickers=nifty_50_tickers,
+    tickers=nifty_list_tickers,
     period=period,
     interval=interval
 )
