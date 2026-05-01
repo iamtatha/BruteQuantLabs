@@ -130,18 +130,15 @@ class ScreenerScraper:
         self._human_delay(0.3, 1.0)
     
     def _expand_all_rows(self):
-        """
-        Expand all collapsible rows (e.g., Sales+, Profit+).
-        """
         logger.info("Expanding collapsible rows...")
 
         try:
-            max_attempts = 10
+            clicked = set()
+            max_attempts = 35
 
-            for attempt in range(max_attempts):
+            for _ in range(max_attempts):
                 expanded = False
 
-                # Get ALL expand buttons (with +)
                 buttons = self.driver.find_elements(
                     By.XPATH,
                     "//button[contains(@onclick, 'Company.showSchedule')]"
@@ -149,23 +146,19 @@ class ScreenerScraper:
 
                 logger.info(f"Found {len(buttons)} expandable buttons")
 
-                for i in range(len(buttons)):
+                for btn in buttons:
                     try:
-                        # Re-fetch to avoid stale elements
-                        buttons = self.driver.find_elements(
-                            By.XPATH,
-                            "//button[contains(@onclick, 'Company.showSchedule')]"
-                        )
-                        btn = buttons[i]
+                        onclick = btn.get_attribute("onclick")
+                        text = btn.text.strip()
+
+                        # Skip already clicked
+                        if onclick in clicked:
+                            continue
 
                         if not btn.is_displayed():
                             continue
 
-                        text = btn.text.strip()
-                        if "+" not in text:
-                            continue  # already expanded
-
-                        # Scroll + JS click (most reliable)
+                        # Scroll + click
                         self.driver.execute_script(
                             "arguments[0].scrollIntoView({block: 'center'});", btn
                         )
@@ -175,8 +168,10 @@ class ScreenerScraper:
 
                         logger.info(f"Expanded: {text}")
 
+                        clicked.add(onclick)
                         expanded = True
-                        self._human_delay(1.5, 2.5)  # wait for DOM update
+
+                        self._human_delay(1.5, 2.5)
                         break
 
                     except StaleElementReferenceException:
@@ -716,5 +711,5 @@ def example_force_refresh():
 #     # example_batch_scrape()
 #     # example_context_manager()
 #     # example_force_refresh()
-#
+
 #     print("\n✓ Scraping complete. Check 'screener_data/' for JSON files.")

@@ -44,10 +44,10 @@ r = requests.get(url, headers=headers)
 print(r.content)
 
 # Step 2: Parse CSV
-with open("database/csv_data/nifty_500.csv", "wb") as f:
+with open("database/static_data/nifty_500.csv", "wb") as f:
     f.write(r.content)
 
-df = pd.read_csv("database/csv_data/nifty_500.csv")
+df = pd.read_csv("database/static_data/nifty_500.csv")
 df = df[["Symbol", "Company Name", "Industry"]]
 
 print("Total NSE stocks:", len(df))
@@ -59,7 +59,7 @@ df["YF_TICKER"] = df["Symbol"].apply(lambda x: x + ".NS")
 print("\nSample Yahoo Finance Tickers:")
 print(df["YF_TICKER"].head())
 
-with open("database/csv_data/nifty_500.csv", "wb") as f:
+with open("database/static_data/nifty_500.csv", "wb") as f:
     f.write(df.to_csv(index=False).encode())
 f.close()
 
@@ -87,10 +87,10 @@ r = requests.get(url, headers=headers)
 print(r.content)
 
 # Step 2: Parse CSV
-with open("database/csv_data/nifty_50.csv", "wb") as f:
+with open("database/static_data/nifty_50.csv", "wb") as f:
     f.write(r.content)
 
-df = pd.read_csv("database/csv_data/nifty_50.csv")
+df = pd.read_csv("database/static_data/nifty_50.csv")
 df = df[["Symbol", "Company Name", "Industry"]]
 
 print("Total NSE stocks:", len(df))
@@ -102,7 +102,7 @@ df["YF_TICKER"] = df["Symbol"].apply(lambda x: x + ".NS")
 print("\nSample Yahoo Finance Tickers:")
 print(df["YF_TICKER"].head())
 
-with open("database/csv_data/nifty_50.csv", "wb") as f:
+with open("database/static_data/nifty_50.csv", "wb") as f:
     f.write(df.to_csv(index=False).encode())
 f.close()
 

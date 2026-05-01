@@ -14,7 +14,7 @@ from data_collection_scripts.utils.screener import ScreenerScraper
 
 
 def nifty_list(v=50):
-    nifty_list = pd.read_csv(f"database/csv_data/nifty_{v}.csv")
+    nifty_list = pd.read_csv(f"database/static_data/nifty_{v}.csv")
 
     nifty_list_tickers = nifty_list["Symbol"].tolist()
     print(f"nifty_{v}_tickers: {nifty_list_tickers}")
