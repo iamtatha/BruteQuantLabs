@@ -67,7 +67,7 @@ def analysis(df, dates, lot=0, lot_size=200, log=0, conf_threshold=0.5):
     if _df.empty:
         print("⚠️ Empty dataframe. Check date slicing.")
         print(start_date, end_date)
-        raise ValueError("Data slice is empty")
+        return None
 
     candle = detect_candles_claude(_df)
     
@@ -81,12 +81,19 @@ def analysis(df, dates, lot=0, lot_size=200, log=0, conf_threshold=0.5):
 def generate_pdf(df, dates, num_lots, stock_code, lot_size=200, conf_threshold=0.5):
     print("="*100)
     logger.info(f"Generating PDF for {stock_code}")
-    with PdfPages(f"research_technical_analysis/candle_stick_examples/{stock_code}.pdf") as pdf:
+    file_path = f"research_technical_analysis/candle_stick_examples/{stock_code}.pdf"
+
+    if os.path.exists(file_path):
+        logger.info(f"PDF already exists for {stock_code}. Skipping...")
+        return
+
+    with PdfPages(file_path) as pdf:
         for lot in range(num_lots):
             fig = analysis(df, dates, lot, lot_size, conf_threshold=conf_threshold)   # your function returns mplfinance fig
 
             if fig is None:
-                continue
+                logger.info(f"Empty figure for lot {lot} in {stock_code}. Finishing...")
+                return
 
             pdf.savefig(fig)   # add page
             fig.clf()          # clear memory (important for loops)
