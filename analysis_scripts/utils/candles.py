@@ -345,7 +345,8 @@ def detect_chart_patterns(df, window=5):
 
 
 
-def detect_candles_claude(df):
+
+def detect_candles_claude(df, **thresholds):
     """
     Improved candlestick pattern detection with confidence scoring.
     
@@ -355,8 +356,79 @@ def detect_candles_claude(df):
     - Stricter validation rules with adaptive thresholds
     - Additional patterns (Morning/Evening Engulfing, Harami, etc.)
     
-    Returns DataFrame with pattern columns + confidence columns
+    Parameters:
+    -----------
+    df : pd.DataFrame
+        OHLC data with columns ['open', 'high', 'low', 'close']
+    **thresholds : dict
+        Optional threshold overrides. See THRESHOLD_DEFAULTS below.
+    
+    Returns:
+    --------
+    DataFrame with pattern columns + confidence columns
+    
+    Example usage:
+    ---------------
+    # Default thresholds
+    result = detect_candles_claude(df)
+    
+    # Custom thresholds
+    result = detect_candles_claude(
+        df,
+        LONG_DAY_THRESHOLD=0.75,
+        HAMMER_LOWER_WICK_RATIO=3.0,
+        DOJI_THRESHOLD=0.1
+    )
     """
+    
+    # =========================
+    # THRESHOLD CONFIGURATION
+    # =========================
+    THRESHOLD_DEFAULTS = {
+        # Single candle: Body ratios
+        "LONG_DAY_THRESHOLD": 0.7,
+        "SHORT_DAY_THRESHOLD": 0.25,
+        
+        # Doji variants
+        "DOJI_THRESHOLD": 0.08,
+        "GRAVESTONE_DOJI_LOWER_WICK": 0.05,
+        "GRAVESTONE_DOJI_UPPER_WICK": 0.6,
+        "DRAGONFLY_DOJI_LOWER_WICK": 0.6,
+        "DRAGONFLY_DOJI_UPPER_WICK": 0.05,
+        "LONG_LEGGED_DOJI_UPPER_WICK": 0.4,
+        "LONG_LEGGED_DOJI_LOWER_WICK": 0.4,
+        
+        # Hammer / Hanging Man
+        "HAMMER_LOWER_WICK_RATIO": 2.5,  # lower_wick > 2.5 * body
+        "HAMMER_UPPER_WICK_RATIO": 0.2,  # upper_wick < 0.2 * body
+        "HAMMER_BODY_RATIO": 0.4,
+        
+        # Shooting Star
+        "SHOOTING_STAR_UPPER_WICK_RATIO": 2.5,  # upper_wick > 2.5 * body
+        "SHOOTING_STAR_LOWER_WICK_RATIO": 0.2,  # lower_wick < 0.2 * body
+        "SHOOTING_STAR_BODY_RATIO": 0.4,
+        
+        # Engulfing
+        "ENGULFING_BODY_MULTIPLIER": 1.1,  # current body > prev body * 1.1
+        "ENGULFING_PREV_BODY_THRESHOLD": 0.3,  # prev body < 0.3 for bonus
+        
+        # Harami
+        "HARAMI_BODY_MULTIPLIER": 0.7,  # current body < prev body * 0.7
+        "HARAMI_CURRENT_BODY_THRESHOLD": 0.5,
+        "HARAMI_PREV_BODY_THRESHOLD": 0.5,
+        
+        # Piercing Line / Dark Cloud Cover
+        "PIERCING_LINE_BODY_RATIO": 0.5,
+        "PIERCING_LINE_PENETRATION_MAX": 0.5,  # Max penetration ratio
+        
+        # Morning/Evening Star
+        "MORNING_STAR_PREV_BODY_RATIO": 0.3,  # doji-like
+        "MORNING_STAR_PREV2_BODY_RATIO": 0.5,  # strong bearish
+    }
+    
+    # Merge user-provided thresholds with defaults
+    config = {**THRESHOLD_DEFAULTS, **thresholds}
+    
     df = df.copy()
     
     # =========================
@@ -434,86 +506,86 @@ def detect_candles_claude(df):
     # =========================
     
     # Long Day (strong body)
-    df["long_day"] = df["body_ratio"] > 0.7
+    df["long_day"] = df["body_ratio"] > config["LONG_DAY_THRESHOLD"]
     df["long_day_conf"] = 0.0
     mask = df["long_day"]
     df.loc[mask, "long_day_conf"] = (
-        (df.loc[mask, "body_ratio"] - 0.7) / 0.3  # How much above 0.7
+        (df.loc[mask, "body_ratio"] - config["LONG_DAY_THRESHOLD"]) / (1 - config["LONG_DAY_THRESHOLD"])
     ).clip(0, 1)
     
     # Short Day / Doji variants
-    df["short_day"] = df["body_ratio"] < 0.25
+    df["short_day"] = df["body_ratio"] < config["SHORT_DAY_THRESHOLD"]
     df["short_day_conf"] = 0.0
     mask = df["short_day"]
-    df.loc[mask, "short_day_conf"] = 1 - df.loc[mask, "body_ratio"] / 0.25
-    
+    df.loc[mask, "short_day_conf"] = 1 - df.loc[mask, "body_ratio"] / config["SHORT_DAY_THRESHOLD"]
+
     # Doji (very small body, balanced wicks)
-    df["doji"] = df["body_ratio"] < 0.05
+    df["doji"] = df["body_ratio"] < config["DOJI_THRESHOLD"]
     df["doji_conf"] = 0.0
     mask = df["doji"]
     wick_balance = (
         1 - np.abs(df.loc[mask, "upper_wick_ratio"] - df.loc[mask, "lower_wick_ratio"])
     )
     df.loc[mask, "doji_conf"] = (
-        (1 - df.loc[mask, "body_ratio"] / 0.05) * 0.6 +  # 60% = body smallness
+        (1 - df.loc[mask, "body_ratio"] / config["DOJI_THRESHOLD"]) * 0.6 +  # 60% = body smallness
         wick_balance * 0.4  # 40% = wick balance
     ).clip(0, 1)
     
     # Gravestone Doji (small body, no lower wick, big upper wick)
     df["gravestone_doji"] = (
-        (df["body_ratio"] < 0.05) &
-        (df["lower_wick_ratio"] < 0.05) &
-        (df["upper_wick_ratio"] > 0.6)
+        (df["body_ratio"] < config["DOJI_THRESHOLD"]) &
+        (df["lower_wick_ratio"] < config["GRAVESTONE_DOJI_LOWER_WICK"]) &
+        (df["upper_wick_ratio"] > config["GRAVESTONE_DOJI_UPPER_WICK"])
     )
     df["gravestone_doji_conf"] = 0.0
     mask = df["gravestone_doji"]
     df.loc[mask, "gravestone_doji_conf"] = (
-        (1 - df.loc[mask, "body_ratio"] / 0.05) * 0.3 +
-        (1 - df.loc[mask, "lower_wick_ratio"] / 0.05) * 0.3 +
-        (df.loc[mask, "upper_wick_ratio"] - 0.6) / 0.4 * 0.4
+        (1 - df.loc[mask, "body_ratio"] / config["DOJI_THRESHOLD"]) * 0.3 +
+        (1 - df.loc[mask, "lower_wick_ratio"] / config["GRAVESTONE_DOJI_LOWER_WICK"]) * 0.3 +
+        (df.loc[mask, "upper_wick_ratio"] - config["GRAVESTONE_DOJI_UPPER_WICK"]) / 0.4 * 0.4
     ).clip(0, 1)
     
     # Dragonfly Doji (small body, no upper wick, big lower wick)
     df["dragonfly_doji"] = (
-        (df["body_ratio"] < 0.05) &
-        (df["upper_wick_ratio"] < 0.05) &
-        (df["lower_wick_ratio"] > 0.6)
+        (df["body_ratio"] < config["DOJI_THRESHOLD"]) &
+        (df["upper_wick_ratio"] < config["DRAGONFLY_DOJI_UPPER_WICK"]) &
+        (df["lower_wick_ratio"] > config["DRAGONFLY_DOJI_LOWER_WICK"])
     )
     df["dragonfly_doji_conf"] = 0.0
     mask = df["dragonfly_doji"]
     df.loc[mask, "dragonfly_doji_conf"] = (
-        (1 - df.loc[mask, "body_ratio"] / 0.05) * 0.3 +
-        (1 - df.loc[mask, "upper_wick_ratio"] / 0.05) * 0.3 +
-        (df.loc[mask, "lower_wick_ratio"] - 0.6) / 0.4 * 0.4
+        (1 - df.loc[mask, "body_ratio"] / config["DOJI_THRESHOLD"]) * 0.3 +
+        (1 - df.loc[mask, "upper_wick_ratio"] / config["DRAGONFLY_DOJI_UPPER_WICK"]) * 0.3 +
+        (df.loc[mask, "lower_wick_ratio"] - config["DRAGONFLY_DOJI_LOWER_WICK"]) / 0.4 * 0.4
     ).clip(0, 1)
     
     # Long Legged Doji
     df["long_legged_doji"] = (
-        (df["body_ratio"] < 0.05) &
-        (df["upper_wick_ratio"] > 0.4) &
-        (df["lower_wick_ratio"] > 0.4)
+        (df["body_ratio"] < config["DOJI_THRESHOLD"]) &
+        (df["upper_wick_ratio"] > config["LONG_LEGGED_DOJI_UPPER_WICK"]) &
+        (df["lower_wick_ratio"] > config["LONG_LEGGED_DOJI_LOWER_WICK"])
     )
     df["long_legged_doji_conf"] = 0.0
     mask = df["long_legged_doji"]
     wick_balance = 1 - np.abs(df.loc[mask, "upper_wick_ratio"] - df.loc[mask, "lower_wick_ratio"]) / 0.8
     df.loc[mask, "long_legged_doji_conf"] = (
-        (1 - df.loc[mask, "body_ratio"] / 0.05) * 0.4 +
+        (1 - df.loc[mask, "body_ratio"] / config["DOJI_THRESHOLD"]) * 0.4 +
         wick_balance * 0.6
     ).clip(0, 1)
     
     # Hammer (strong reversal at support)
     df["hammer"] = (
-        (df["lower_wick"] > 2.5 * df["body"]) &
-        (df["upper_wick"] < 0.2 * df["body"]) &
-        (df["body_ratio"] < 0.4)
+        (df["lower_wick"] > config["HAMMER_LOWER_WICK_RATIO"] * df["body"]) &
+        (df["upper_wick"] < config["HAMMER_UPPER_WICK_RATIO"] * df["body"]) &
+        (df["body_ratio"] < config["HAMMER_BODY_RATIO"])
     )
     df["hammer_conf"] = 0.0
     mask = df["hammer"]
     wick_ratio = df.loc[mask, "lower_wick"] / df.loc[mask, "body"].clip(lower=0.01)
     df.loc[mask, "hammer_conf"] = (
         (wick_ratio.clip(upper=5) / 5) * 0.5 +
-        (1 - df.loc[mask, "upper_wick_ratio"] / 0.2) * 0.25 +
-        (1 - df.loc[mask, "body_ratio"] / 0.4) * 0.25
+        (1 - df.loc[mask, "upper_wick_ratio"] / config["HAMMER_UPPER_WICK_RATIO"]) * 0.25 +
+        (1 - df.loc[mask, "body_ratio"] / config["HAMMER_BODY_RATIO"]) * 0.25
     ).clip(0, 1)
     
     # Hammer validation (context matters)
@@ -549,17 +621,17 @@ def detect_candles_claude(df):
     
     # Shooting Star (opposite of hammer: big upper wick)
     df["shooting_star"] = (
-        (df["upper_wick"] > 2.5 * df["body"]) &
-        (df["lower_wick"] < 0.2 * df["body"]) &
-        (df["body_ratio"] < 0.4)
+        (df["upper_wick"] > config["SHOOTING_STAR_UPPER_WICK_RATIO"] * df["body"]) &
+        (df["lower_wick"] < config["SHOOTING_STAR_LOWER_WICK_RATIO"] * df["body"]) &
+        (df["body_ratio"] < config["SHOOTING_STAR_BODY_RATIO"])
     )
     df["shooting_star_conf"] = 0.0
     mask = df["shooting_star"]
     wick_ratio = df.loc[mask, "upper_wick"] / df.loc[mask, "body"].clip(lower=0.01)
     df.loc[mask, "shooting_star_conf"] = (
         (wick_ratio.clip(upper=5) / 5) * 0.5 +
-        (1 - df.loc[mask, "lower_wick_ratio"] / 0.2) * 0.25 +
-        (1 - df.loc[mask, "body_ratio"] / 0.4) * 0.25
+        (1 - df.loc[mask, "lower_wick_ratio"] / config["SHOOTING_STAR_LOWER_WICK_RATIO"]) * 0.25 +
+        (1 - df.loc[mask, "body_ratio"] / config["SHOOTING_STAR_BODY_RATIO"]) * 0.25
     ).clip(0, 1)
     
     df["shooting_star_valid"] = False
@@ -585,7 +657,7 @@ def detect_candles_claude(df):
         (df["close"] > df["open"]) &  # Current bullish
         (df["open"] <= prev["close"]) &  # Opens at/below prev close
         (df["close"] >= prev["open"]) &  # Closes above prev open
-        (df["body"] > prev["body"] * 1.1)  # Larger body
+        (df["body"] > prev["body"] * config["ENGULFING_BODY_MULTIPLIER"])  # Larger body
     )
     df["bullish_engulfing_conf"] = 0.0
     mask = df["bullish_engulfing"]
@@ -593,7 +665,7 @@ def detect_candles_claude(df):
     df.loc[mask, "bullish_engulfing_conf"] = (
         (engulf_ratio.clip(upper=3) / 3) * 0.5 +
         (df.loc[mask, "body_ratio"] / 0.8).clip(0, 1) * 0.3 +
-        ((prev.loc[mask, "body_ratio"] < 0.3).astype(float)) * 0.2
+        ((prev.loc[mask, "body_ratio"] < config["ENGULFING_PREV_BODY_THRESHOLD"]).astype(float)) * 0.2
     ).clip(0, 1)
     
     df["bullish_engulfing_valid"] = False
@@ -613,7 +685,7 @@ def detect_candles_claude(df):
         (df["close"] < df["open"]) &
         (df["open"] >= prev["close"]) &
         (df["close"] <= prev["open"]) &
-        (df["body"] > prev["body"] * 1.1)
+        (df["body"] > prev["body"] * config["ENGULFING_BODY_MULTIPLIER"])
     )
     df["bearish_engulfing_conf"] = 0.0
     mask = df["bearish_engulfing"]
@@ -621,7 +693,7 @@ def detect_candles_claude(df):
     df.loc[mask, "bearish_engulfing_conf"] = (
         (engulf_ratio.clip(upper=3) / 3) * 0.5 +
         (df.loc[mask, "body_ratio"] / 0.8).clip(0, 1) * 0.3 +
-        ((prev.loc[mask, "body_ratio"] < 0.3).astype(float)) * 0.2
+        ((prev.loc[mask, "body_ratio"] < config["ENGULFING_PREV_BODY_THRESHOLD"]).astype(float)) * 0.2
     ).clip(0, 1)
     
     df["bearish_engulfing_valid"] = False
@@ -641,15 +713,15 @@ def detect_candles_claude(df):
         (df["close"] > df["open"]) &  # Current bullish
         (df["open"] > prev["close"]) &  # Opens above prev close
         (df["close"] < prev["open"]) &  # Closes below prev open
-        (df["body"] < prev["body"] * 0.7)  # Smaller body
+        (df["body"] < prev["body"] * config["HARAMI_BODY_MULTIPLIER"])  # Smaller body
     )
     df["bullish_harami_conf"] = 0.0
     mask = df["bullish_harami"]
     harami_ratio = (prev.loc[mask, "body"] - df.loc[mask, "body"]) / (prev.loc[mask, "body"] + 1e-9)
     df.loc[mask, "bullish_harami_conf"] = (
         (harami_ratio.clip(0, 1)) * 0.5 +
-        (df.loc[mask, "body_ratio"] / 0.5).clip(0, 1) * 0.3 +
-        ((prev.loc[mask, "body_ratio"] > 0.5).astype(float)) * 0.2
+        (df.loc[mask, "body_ratio"] / config["HARAMI_CURRENT_BODY_THRESHOLD"]).clip(0, 1) * 0.3 +
+        ((prev.loc[mask, "body_ratio"] > config["HARAMI_PREV_BODY_THRESHOLD"]).astype(float)) * 0.2
     ).clip(0, 1)
     
     # Piercing Line (bullish, gap down then strong recovery)
@@ -659,7 +731,7 @@ def detect_candles_claude(df):
         (df["open"] < prev["low"]) &  # Opens below prev low (gap)
         (df["close"] > (prev["open"] + prev["close"]) / 2) &  # Closes above midpoint
         (df["close"] <= prev["open"]) &  # But below prev open
-        (df["body_ratio"] > 0.5)  # Good body
+        (df["body_ratio"] > config["PIERCING_LINE_BODY_RATIO"])  # Good body
     )
     df["piercing_line_conf"] = 0.0
     mask = df["piercing_line"]
@@ -667,7 +739,7 @@ def detect_candles_claude(df):
         (prev.loc[mask, "open"] - prev.loc[mask, "close"]).abs() + 1e-9
     )
     df.loc[mask, "piercing_line_conf"] = (
-        (penetration.clip(0, 0.5) / 0.5) * 0.5 +
+        (penetration.clip(0, config["PIERCING_LINE_PENETRATION_MAX"]) / config["PIERCING_LINE_PENETRATION_MAX"]) * 0.5 +
         (df.loc[mask, "body_ratio"] / 0.8).clip(0, 1) * 0.5
     ).clip(0, 1)
     
@@ -678,7 +750,7 @@ def detect_candles_claude(df):
         (df["open"] > prev["high"]) &
         (df["close"] < (prev["open"] + prev["close"]) / 2) &
         (df["close"] >= prev["open"]) &
-        (df["body_ratio"] > 0.5)
+        (df["body_ratio"] > config["PIERCING_LINE_BODY_RATIO"])
     )
     df["dark_cloud_cover_conf"] = 0.0
     mask = df["dark_cloud_cover"]
@@ -686,7 +758,7 @@ def detect_candles_claude(df):
         (prev.loc[mask, "close"] - prev.loc[mask, "open"]).abs() + 1e-9
     )
     df.loc[mask, "dark_cloud_cover_conf"] = (
-        (penetration.clip(0, 0.5) / 0.5) * 0.5 +
+        (penetration.clip(0, config["PIERCING_LINE_PENETRATION_MAX"]) / config["PIERCING_LINE_PENETRATION_MAX"]) * 0.5 +
         (df.loc[mask, "body_ratio"] / 0.8).clip(0, 1) * 0.5
     ).clip(0, 1)
     
@@ -697,7 +769,7 @@ def detect_candles_claude(df):
     # Morning Star (bullish reversal: down, doji-like, up)
     df["morning_star"] = (
         (prev2["close"] < prev2["open"]) &  # Strong bearish
-        (prev["body_ratio"] < 0.3) &  # Small body (doji-like)
+        (prev["body_ratio"] < config["MORNING_STAR_PREV_BODY_RATIO"]) &  # Small body (doji-like)
         (prev["low"] < prev2["low"]) &  # Continues down
         (df["close"] > df["open"]) &  # Reverses up
         (df["close"] > (prev2["open"] + prev2["close"]) / 2)  # Strong recovery
@@ -708,8 +780,8 @@ def detect_candles_claude(df):
         (prev2.loc[mask, "open"] - prev2.loc[mask, "close"]).abs() + 1e-9
     )
     df.loc[mask, "morning_star_conf"] = (
-        ((prev2.loc[mask, "body_ratio"] > 0.5).astype(float)) * 0.3 +
-        ((prev.loc[mask, "body_ratio"] < 0.3).astype(float)) * 0.3 +
+        ((prev2.loc[mask, "body_ratio"] > config["MORNING_STAR_PREV2_BODY_RATIO"]).astype(float)) * 0.3 +
+        ((prev.loc[mask, "body_ratio"] < config["MORNING_STAR_PREV_BODY_RATIO"]).astype(float)) * 0.3 +
         (recovery.clip(0, 1)) * 0.4
     ).clip(0, 1)
     
@@ -722,7 +794,7 @@ def detect_candles_claude(df):
     # Evening Star (bearish version)
     df["evening_star"] = (
         (prev2["close"] > prev2["open"]) &
-        (prev["body_ratio"] < 0.3) &
+        (prev["body_ratio"] < config["MORNING_STAR_PREV_BODY_RATIO"]) &
         (prev["high"] > prev2["high"]) &
         (df["close"] < df["open"]) &
         (df["close"] < (prev2["open"] + prev2["close"]) / 2)
@@ -733,8 +805,8 @@ def detect_candles_claude(df):
         (prev2.loc[mask, "close"] - prev2.loc[mask, "open"]).abs() + 1e-9
     )
     df.loc[mask, "evening_star_conf"] = (
-        ((prev2.loc[mask, "body_ratio"] > 0.5).astype(float)) * 0.3 +
-        ((prev.loc[mask, "body_ratio"] < 0.3).astype(float)) * 0.3 +
+        ((prev2.loc[mask, "body_ratio"] > config["MORNING_STAR_PREV2_BODY_RATIO"]).astype(float)) * 0.3 +
+        ((prev.loc[mask, "body_ratio"] < config["MORNING_STAR_PREV_BODY_RATIO"]).astype(float)) * 0.3 +
         (decline.clip(0, 1)) * 0.4
     ).clip(0, 1)
     
@@ -745,6 +817,7 @@ def detect_candles_claude(df):
     ).clip(0, 1)
     
     return df
+
 
 
 def detect_chart_patterns_claude(df, window=5):
@@ -1093,7 +1166,7 @@ def plot_with_annotations(df):
 
 
 
-def plot_valid_signals(df):
+def plot_valid_signals(df, conf_threshold=0.5):
     df_plot = df.copy()
 
     df_plot = df_plot.rename(columns={
@@ -1112,48 +1185,66 @@ def plot_valid_signals(df):
     bullish_markers = np.full(len(df), np.nan)
     bearish_markers = np.full(len(df), np.nan)
 
-    # Store annotation info
+    # Store annotation info: (index, y_pos, text, color, conf_score)
     annotations = []
 
     for i, row in df.iterrows():
 
         # 🟢 Bullish
         if row.get("hammer_valid", False):
-            bullish_markers[i] = row["low"] * 0.995
-            annotations.append((i, row["low"], "Hammer", "green"))
+            conf = row.get("hammer_valid_conf", 0.0)
+            if conf >= conf_threshold:
+                bullish_markers[i] = row["low"] * 0.995
+                annotations.append((i, row["low"], "Hammer", "green", conf))
 
         elif row.get("bullish_engulfing_valid", False):
-            bullish_markers[i] = row["low"] * 0.995
-            annotations.append((i, row["low"], "BullEng", "green"))
+            conf = row.get("bullish_engulfing_valid_conf", 0.0)
+            if conf >= conf_threshold:
+                bullish_markers[i] = row["low"] * 0.995
+                annotations.append((i, row["low"], "BullEng", "green", conf))
 
         elif row.get("morning_star_valid", False):
-            bullish_markers[i] = row["low"] * 0.995
-            annotations.append((i, row["low"], "Morning*", "green"))
+            conf = row.get("morning_star_valid_conf", 0.0)
+            if conf >= conf_threshold:
+                bullish_markers[i] = row["low"] * 0.995
+                annotations.append((i, row["low"], "Morning★", "green", conf))
 
         elif row.get("piercing_line", False):
-            bullish_markers[i] = row["low"] * 0.995
-            annotations.append((i, row["low"], "Piercing", "green"))
+            conf = row.get("piercing_line_conf", 0.0)
+            if conf >= conf_threshold:
+                bullish_markers[i] = row["low"] * 0.995
+                annotations.append((i, row["low"], "Piercing", "green", conf))
 
         # 🔴 Bearish
         elif row.get("hanging_man_valid", False):
-            bearish_markers[i] = row["high"] * 1.005
-            annotations.append((i, row["high"], "HangMan", "red"))
+            conf = row.get("hanging_man_valid_conf", 0.0)
+            if conf >= conf_threshold:
+                bearish_markers[i] = row["high"] * 1.005
+                annotations.append((i, row["high"], "HangMan", "red", conf))
 
         elif row.get("shooting_star_valid", False):
-            bearish_markers[i] = row["high"] * 1.005
-            annotations.append((i, row["high"], "Shoot*", "red"))
+            conf = row.get("shooting_star_valid_conf", 0.0)
+            if conf >= conf_threshold:
+                bearish_markers[i] = row["high"] * 1.005
+                annotations.append((i, row["high"], "Shoot★", "red", conf))
 
         elif row.get("bearish_engulfing_valid", False):
-            bearish_markers[i] = row["high"] * 1.005
-            annotations.append((i, row["high"], "BearEng", "red"))
+            conf = row.get("bearish_engulfing_valid_conf", 0.0)
+            if conf >= conf_threshold:
+                bearish_markers[i] = row["high"] * 1.005
+                annotations.append((i, row["high"], "BearEng", "red", conf))
 
         elif row.get("evening_star_valid", False):
-            bearish_markers[i] = row["high"] * 1.005
-            annotations.append((i, row["high"], "Evening*", "red"))
+            conf = row.get("evening_star_valid_conf", 0.0)
+            if conf >= conf_threshold:
+                bearish_markers[i] = row["high"] * 1.005
+                annotations.append((i, row["high"], "Evening★", "red", conf))
 
         elif row.get("dark_cloud_cover", False):
-            bearish_markers[i] = row["high"] * 1.005
-            annotations.append((i, row["high"], "DarkCloud", "red"))
+            conf = row.get("dark_cloud_cover_conf", 0.0)
+            if conf >= conf_threshold:
+                bearish_markers[i] = row["high"] * 1.005
+                annotations.append((i, row["high"], "DarkCloud", "red", conf))
 
     apds = []
 
@@ -1163,7 +1254,8 @@ def plot_valid_signals(df):
                 bullish_markers,
                 type='scatter',
                 marker='^',
-                markersize=80
+                markersize=80,
+                color='green'
             )
         )
 
@@ -1173,7 +1265,8 @@ def plot_valid_signals(df):
                 bearish_markers,
                 type='scatter',
                 marker='v',
-                markersize=80
+                markersize=80,
+                color='red'
             )
         )
 
@@ -1188,10 +1281,13 @@ def plot_valid_signals(df):
 
     ax = axlist[0]
 
-    # --- Add text annotations ---
-    y_offset = (df["high"].max() - df["low"].min()) * 0.02
+    # --- Add text annotations with confidence ---
+    y_offset = (df["high"].max() - df["low"].min()) * 0.13
 
-    for x, y, text, color in annotations:
+    for x, y, text, color, conf in annotations:
+        # Format: "PatternName\n(0.85)" where 0.85 is confidence
+        label = f"{text}\n({conf:.2f})"
+        
         if color == "green":
             y_text = y - y_offset
         else:
@@ -1200,15 +1296,22 @@ def plot_valid_signals(df):
         ax.text(
             x,
             y_text,
-            text,
+            label,
             color=color,
-            fontsize=8,
+            fontsize=7,
             ha="center",
-            va="center"
+            va="center",
+            weight='bold',
+            bbox=dict(
+                boxstyle='round,pad=0.3',
+                facecolor='white',
+                edgecolor=color,
+                alpha=0.6,
+                linewidth=1
+            )
         )
 
     return fig
-
 
 
 
@@ -1342,3 +1445,5 @@ def plot_chart_patterns(df):
 #     df = detect_candles(df)
 
 #     fig = plot_with_annotations(df)
+
+
