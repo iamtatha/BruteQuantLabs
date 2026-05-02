@@ -39,10 +39,26 @@ def nifty_list(v=50):
     return nifty_list_tickers
 
 
+def get_all_nifty_tickers():
+    nifty_other_list = pd.read_csv(f"database/static_data/nse_equity_list.csv")
+    symbols = nifty_other_list["SYMBOL"].tolist()
+    tickers = [f"{symbol}.NS" for symbol in symbols]
 
-nifty_list_tickers = nifty_list(500)
+    nifty_500_list = nifty_list(v=500)
+
+    ret_list = []
+    for ticker in tickers:
+        if ticker not in nifty_500_list:
+            ret_list.append(ticker)
+    return ret_list
+
+
+
+non_nifty_500 = get_all_nifty_tickers()
+
+
 fetch_or_load_stock_price(
-    tickers=nifty_list_tickers,
+    tickers=non_nifty_500,
     period=period,
     interval=interval
 )

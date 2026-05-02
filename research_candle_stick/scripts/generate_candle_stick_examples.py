@@ -55,8 +55,14 @@ def analysis(df, dates, lot=0, lot_size=200, log=0, conf_threshold=0.5):
     start_date_ind = n - (lot_size + step * lot)
     end_date_ind = n - (step * lot) - 1
 
-    start_date = dates[start_date_ind]
-    end_date = dates[end_date_ind]
+    try:
+        start_date = dates[start_date_ind]
+        end_date = dates[end_date_ind]
+    except IndexError:
+        logger.error(f"IndexError for lot {lot}. start_date_ind: {start_date_ind}, end_date_ind: {end_date_ind}, n: {n}")
+        logger.error(f"Dates list: start: {dates[:3]}, end: {dates[:-3]}")
+        return None
+        
 
     _df = df[start_date:end_date]
 
@@ -79,12 +85,23 @@ def analysis(df, dates, lot=0, lot_size=200, log=0, conf_threshold=0.5):
 
 
 def generate_pdf(df, dates, num_lots, stock_code, lot_size=200, conf_threshold=0.5):
-    print("="*100)
-    logger.info(f"Generating PDF for {stock_code}")
-    file_path = f"research_technical_analysis/candle_stick_examples/{stock_code}.pdf"
+    file_path_nifty_50 = f"research_candle_stick/candle_stick_examples/nifty_50/{stock_code}.pdf"
+    file_path_nifty_450 = f"research_candle_stick/candle_stick_examples/nifty_450/{stock_code}.pdf"
+    file_path_nifty_other = f"research_candle_stick/candle_stick_examples/nifty_other/{stock_code}.pdf"
 
+    file_path = file_path_nifty_50
     if os.path.exists(file_path):
-        logger.info(f"PDF already exists for {stock_code}. Skipping...")
+        logger.info(f"PDF already exists for {stock_code} in nifty_50. Skipping...")
+        return
+    
+    file_path = file_path_nifty_450
+    if os.path.exists(file_path):
+        logger.info(f"PDF already exists for {stock_code} in nifty_450. Skipping...")
+        return
+    
+    file_path = file_path_nifty_other
+    if os.path.exists(file_path):
+        logger.info(f"PDF already exists for {stock_code} in nifty_other. Skipping...")
         return
 
     with PdfPages(file_path) as pdf:
@@ -117,6 +134,8 @@ def run_nifty(v):
     print(f"nifty_{v}_tickers: {nifty_list_tickers}")
     
     for stock_code in nifty_list_tickers:
+        print("="*100)
+        logger.info(f"Generating PDF for {stock_code} | \t\t STARTING {nifty_list_tickers.index(stock_code)+1}/{len(nifty_list_tickers)}")
         run_example(stock_code)
 
 
@@ -126,4 +145,4 @@ stock_code = "TCS"
 # run_example(stock_code)
 
 
-run_nifty(50)
+run_nifty(500)
