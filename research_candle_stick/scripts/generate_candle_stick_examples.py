@@ -6,6 +6,7 @@ from pathlib import Path
 import csv
 import pandas as pd
 import logging
+import time
 
 # Root = parent of current file
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
@@ -25,6 +26,14 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+from analysis_scripts.utils.support_resistance import (
+    detect_support_resistance_claude,
+    plot_support_resistance,
+    detect_support_resistance_walkforward,
+    detect_support_resistance_walkforward_optimized,
+    plot_support_resistance_compact,
+    plot_support_resistance_enhanced,
+)
 from analysis_scripts.utils.candles import detect_candles_claude, plot_valid_signals
 
 
@@ -35,7 +44,11 @@ PRICES_DIR = "database/historical_data_yf"
 
 def load_data(stock_code="TCS"):
     file_path = f"{PRICES_DIR}/{stock_code}.NS_yf.json"
-    df = pd.read_json(file_path).T
+    try:
+        df = pd.read_json(file_path).T
+    except FileNotFoundError:
+        logger.error(f"File not found for {stock_code} at {file_path}")
+        return None, None, None
     
     dates = pd.to_datetime(df.index.tolist()).tolist()
     
@@ -47,7 +60,7 @@ def load_data(stock_code="TCS"):
 
 
 
-def analysis(df, dates, lot=0, lot_size=200, log=0, conf_threshold=0.5):
+def candle_stick_analysis(df, dates, lot=0, lot_size=200, log=0, conf_threshold=0.5):
     n = len(df)
 
     step = 50
@@ -75,38 +88,83 @@ def analysis(df, dates, lot=0, lot_size=200, log=0, conf_threshold=0.5):
         print(start_date, end_date)
         return None
 
-    candle = detect_candles_claude(_df)
+    candle_df = detect_candles_claude(_df)
     
     if log:
-        print(candle.columns)
+        print(candle_df.columns)
+
+    return candle_df
+
+
+
+def support_resistance_analysis(df, dates, lot=0, lot_size=200, log=0, conf_threshold=0.5):
+    n = len(df)
+
+    step = 50
+
+    start_date_ind = n - (lot_size + step * lot)
+    end_date_ind = n - (step * lot) - 1
+
+    try:
+        start_date = dates[start_date_ind]
+        end_date = dates[end_date_ind]
+    except IndexError:
+        logger.error(f"IndexError for lot {lot}. start_date_ind: {start_date_ind}, end_date_ind: {end_date_ind}, n: {n}")
+        logger.error(f"Dates list: start: {dates[:3]}, end: {dates[:-3]}")
+        return None, None, None
+        
+
+    _df = df[start_date:end_date]
+
+    if log:
+        print(start_date, end_date)
+        print(_df)
+
+    if _df.empty:
+        print("⚠️ Empty dataframe. Check date slicing.")
+        print(start_date, end_date)
+        return None, None, None
+
+    # support, resistance, _df = detect_support_resistance_walkforward(_df)
+    support, resistance, _df = detect_support_resistance_walkforward_optimized(_df)
+
     
-    return plot_valid_signals(candle, conf_threshold)
+    if log:
+        print(support.columns)
+        print(resistance.columns)
+
+    return _df, support, resistance
 
 
 
-def generate_pdf(df, dates, num_lots, stock_code, lot_size=200, conf_threshold=0.5):
-    file_path_nifty_50 = f"research_candle_stick/candle_stick_examples/nifty_50/{stock_code}.pdf"
-    file_path_nifty_450 = f"research_candle_stick/candle_stick_examples/nifty_450/{stock_code}.pdf"
-    file_path_nifty_other = f"research_candle_stick/candle_stick_examples/nifty_other/{stock_code}.pdf"
+def get_combined_image(df, dates, lot=0, lot_size=200, log=0, conf_threshold=0.5):
+    support_resistance_df, support, resistance = support_resistance_analysis(df, dates, lot, lot_size, conf_threshold=conf_threshold)
+    candle_df = candle_stick_analysis(df, dates, lot, lot_size, conf_threshold=conf_threshold)
 
-    file_path = file_path_nifty_50
+    if support_resistance_df is None or candle_df is None:
+        return None
+
+    candle_fig, _axlist = plot_valid_signals(
+        candle_df, conf_threshold=0.5, fig=None, axlist=None
+    )
+    fig, axlist = plot_support_resistance_enhanced(support_resistance_df, support, resistance, fig=candle_fig, axlist=_axlist)
+    return fig
+
+
+
+
+
+def generate_pdf(df, dates, num_lots, stock_code, lot_size=200, conf_threshold=0.5, sub_folder="other"):
+    file_path = f"research_candle_stick/candle_stick_examples/{sub_folder}/{stock_code}.pdf"
+
     if os.path.exists(file_path):
-        logger.info(f"PDF already exists for {stock_code} in nifty_50. Skipping...")
+        logger.info(f"PDF already exists for {stock_code} in {sub_folder}. Skipping...")
         return
     
-    file_path = file_path_nifty_450
-    if os.path.exists(file_path):
-        logger.info(f"PDF already exists for {stock_code} in nifty_450. Skipping...")
-        return
-    
-    file_path = file_path_nifty_other
-    if os.path.exists(file_path):
-        logger.info(f"PDF already exists for {stock_code} in nifty_other. Skipping...")
-        return
 
     with PdfPages(file_path) as pdf:
         for lot in range(num_lots):
-            fig = analysis(df, dates, lot, lot_size, conf_threshold=conf_threshold)   # your function returns mplfinance fig
+            fig = get_combined_image(df, dates, lot, lot_size, conf_threshold=conf_threshold)   # your function returns mplfinance fig
 
             if fig is None:
                 logger.info(f"Empty figure for lot {lot} in {stock_code}. Finishing...")
@@ -121,28 +179,76 @@ def generate_pdf(df, dates, num_lots, stock_code, lot_size=200, conf_threshold=0
 
 
 
-def run_example(stock_code):
+def run_example(stock_code, sub_folder):
     df, dates, _ = load_data(stock_code)
-    generate_pdf(df, dates, num_lots, stock_code)
+    if df is None:
+        logger.error(f"Data loading failed for {stock_code}. Skipping PDF generation.")
+        return
+    generate_pdf(df, dates, num_lots, stock_code, sub_folder=sub_folder)
 
 
 
-def run_nifty(v):
-    nifty_list = pd.read_csv(f"database/static_data/nifty_{v}.csv")
+def get_nifty_list(v):
+    if v == 50:
+        nifty_list = pd.read_csv(f"database/static_data/nifty_{v}.csv")
+        nifty_list_tickers = nifty_list["Symbol"].tolist()
+    elif v == 450:
+        nifty_list = pd.read_csv(f"database/static_data/nifty_500.csv")
+        nifty_list_500 = nifty_list["Symbol"].tolist()
+        nifty_list_50 = get_nifty_list(50)
+        
+        nifty_list_tickers = []
+        for ticker in nifty_list_500:
+            if ticker not in nifty_list_50:
+                nifty_list_tickers.append(ticker)
 
-    nifty_list_tickers = nifty_list["Symbol"].tolist()
-    print(f"nifty_{v}_tickers: {nifty_list_tickers}")
-    
-    for stock_code in nifty_list_tickers:
-        print("="*100)
-        logger.info(f"Generating PDF for {stock_code} | \t\t STARTING {nifty_list_tickers.index(stock_code)+1}/{len(nifty_list_tickers)}")
-        run_example(stock_code)
+    return nifty_list_tickers
+
+
+
+# stock_code = "TCS"
+# num_lots = 5
+# sub_folder = "nifty_other"
+# start_time = time.time()
+# run_example(stock_code, sub_folder=sub_folder)
+# end_time = time.time()
+
+# print(f"Time taken for {stock_code}: {end_time - start_time:.2f} seconds")
+
+
+
+
+# stock_code = "ITC"
+# num_lots = 10
+# sub_folder = "nifty_other"
+# start_time = time.time()
+# run_example(stock_code, sub_folder=sub_folder)
+# end_time = time.time()
+
+# print(f"Time taken for {stock_code}: {end_time - start_time:.2f} seconds")
+
+
+
+
+
+
+
+
+
+
 
 
 
 num_lots = 50
-stock_code = "TCS"
-# run_example(stock_code)
+sub_folder="nifty_50"
+# sub_folder="other"
+
+v = 50
 
 
-run_nifty(500)
+nifty_list_tickers = get_nifty_list(v)
+
+for stock_code in nifty_list_tickers:
+    print("="*100)
+    logger.info(f"Generating PDF for {stock_code} | \t\t STARTING {nifty_list_tickers.index(stock_code)+1}/{len(nifty_list_tickers)}")
+    run_example(stock_code, sub_folder=sub_folder)

@@ -89,11 +89,13 @@ def example_single_stock(stock_code="TCS"):
     print(f"Date range: {result.date_range[0]} to {result.date_range[1]}")
     
     # Print overall statistics
-    print(f"\nOverall bullish rates:")
-    print(f"  7-day:  {result.overall_bullish_rate_7d:.1%}")
-    print(f"  14-day: {result.overall_bullish_rate_14d:.1%}")
-    print(f"  30-day: {result.overall_bullish_rate_30d:.1%}")
-    
+    print(f"\nOverall accuracy rates:")
+    print(f"  1-day:  {result.overall_accuracy_rate_1d:.1%}")
+    print(f"  3-day:  {result.overall_accuracy_rate_3d:.1%}")
+    print(f"  7-day:  {result.overall_accuracy_rate_7d:.1%}")
+    print(f"  14-day: {result.overall_accuracy_rate_14d:.1%}")
+    print(f"  30-day: {result.overall_accuracy_rate_30d:.1%}")
+
     # Show pattern statistics
     print("\nPattern Statistics:")
     stats_df = pattern_stats_to_dataframe(result)
@@ -120,78 +122,32 @@ def example_high_quality_patterns(stock_code="TCS"):
         stock_name=stock_code,
         min_conf_threshold=0.60,
     )
-    
-    # Filter patterns: 55%+ bullish rate, 50%+ win rate, 10+ occurrences
+
+    # Filter patterns: 55%+ accuracy rate, 50%+ win rate, 10+ occurrences
     high_quality = filter_patterns_by_criteria(
         result,
-        min_bullish_rate=0.55,
-        min_win_rate=0.50,
+        min_accuracy_rate=0.65,
+        min_win_rate=0.60,
         min_count=10,
-        gap_days=30
+        gap_days=7
     )
     
-    print(f"\nHigh-quality patterns (55%+ bullish, 50%+ win rate, 10+ occurrences):")
+    print(f"\nHigh-quality patterns (55%+ accuracy, 50%+ win rate, 10+ occurrences):")
     if len(high_quality) > 0:
         print(high_quality.to_string(index=False))
+        
+        # Print detailed returns for each time horizon
+        print("\nDetailed Average Max Returns:")
+        print(f"{'Pattern':<30} {'7d Return':<15} {'14d Return':<15} {'30d Return':<15}")
+        print("-" * 75)
+        for key, stat in result.pattern_stats.items():
+            pattern_name = f"{stat.pattern_name} ({stat.direction})"
+            if stat.total_occurrences >= 10:
+                print(f"{pattern_name:<30} {stat.avg_max_return_7d:>13.2f}% {stat.avg_max_return_14d:>13.2f}% {stat.avg_max_return_30d:>13.2f}%")
     else:
         print("No patterns meet criteria")
     
     return result, high_quality
-
-
-# =========================
-# EXAMPLE 3: Confidence Threshold Tuning
-# =========================
-
-def example_threshold_tuning(stock_code="TCS"):
-    """Find optimal confidence threshold."""
-    print("\n" + "="*70)
-    print("EXAMPLE 3: Confidence Threshold Optimization")
-    print("="*70)
-
-    df, _, _ = load_data(stock_code=stock_code)
-
-    thresholds = [0.0, 0.3, 0.5, 0.7, 0.9]
-    results = {}
-    
-    for threshold in thresholds:
-        result = analyze_candlestick_patterns(
-            df=df,
-            detect_func=detect_candles_claude,
-            stock_name=stock_code,
-            min_conf_threshold=threshold,
-        )
-        
-        # Count high-quality patterns
-        high_quality = filter_patterns_by_criteria(
-            result,
-            min_bullish_rate=0.55,
-            min_win_rate=0.50,
-            min_count=10,
-            gap_days=21
-        )
-        
-        results[threshold] = {
-            "total_patterns": result.n_patterns_detected,
-            "pattern_types": len(result.pattern_stats),
-            "high_quality": len(high_quality),
-            "quality_ratio": len(high_quality) / max(1, len(result.pattern_stats)),
-        }
-    
-    # Display results
-    print("\nThreshold Analysis:")
-    print(f"{'Threshold':<12} {'Total':<10} {'Types':<10} {'HQ':<10} {'Ratio':<10}")
-    print("-" * 52)
-    for threshold in sorted(results.keys()):
-        r = results[threshold]
-        print(f"{threshold:<12} {r['total_patterns']:<10} {r['pattern_types']:<10} "
-              f"{r['high_quality']:<10} {r['quality_ratio']:.2%}")
-    
-    # Find optimal
-    optimal = max(results.items(), key=lambda x: x[1]["quality_ratio"])
-    print(f"\nOptimal threshold: {optimal[0]} (quality ratio: {optimal[1]['quality_ratio']:.1%})")
-    
-    return results
 
 
 # =========================
@@ -240,7 +196,7 @@ def example_multi_stock(stock_codes = ["TCS", "INFY", "WIPRO"]):
 # EXAMPLE 5: Time Decay Analysis
 # =========================
 
-def example_time_decay(stock_code="TCS"):
+def example_time_decay(stock_code = "TCS"):
     """Analyze how pattern predictability decays over time."""
     print("\n" + "="*70)
     print("EXAMPLE 5: Time Decay Analysis (Pattern Power Over Time)")
@@ -248,62 +204,105 @@ def example_time_decay(stock_code="TCS"):
 
     df, _, _ = load_data(stock_code=stock_code)
 
-    # Analyze at multiple time horizons
+    # Analyze at multiple time horizons (skip 1d, 3d - not enough future data)
     result = analyze_candlestick_patterns(
         df=df,
         detect_func=detect_candles_claude,
         stock_name=stock_code,
-        day_gaps=[1, 3, 7, 14, 30],  # Many time horizons
+        day_gaps=[7, 14, 30],  # Skip 1, 3 - not enough future data
     )
-
-    print(result)
     
-    print("\nPattern Predictability by Time Horizon:")
-    print(f"{'Gap':<8} {'Overall Bullish':<20} {'Avg Return':<15}")
-    print("-" * 43)
+    print(f"\nAnalyzed {result.n_patterns_detected} patterns over {result.n_candles} candles")
     
-    # This would require modifying the function to store all gap data
-    # For now, show pattern with fixed gaps
-    print("(Note: Modify function to store all day_gap statistics)")
+    print("\nOverall Pattern Accuracy by Time Horizon:")
+    print(f"{'Gap':<8} {'Accuracy':<15}")
+    print("-" * 23)
+    if not np.isnan(result.overall_accuracy_rate_7d):
+        print(f"{'7d':<8} {result.overall_accuracy_rate_7d:.1%}")
+    if not np.isnan(result.overall_accuracy_rate_14d):
+        print(f"{'14d':<8} {result.overall_accuracy_rate_14d:.1%}")
+    if not np.isnan(result.overall_accuracy_rate_30d):
+        print(f"{'30d':<8} {result.overall_accuracy_rate_30d:.1%}")
+    
+    # Analyze each pattern across time horizons
+    print("\n\nPattern-by-Pattern Time Decay Analysis:")
+    print(f"{'Pattern':<35} {'7d Acc':<12} {'14d Acc':<12} {'30d Acc':<12} {'Trend':<10}")
+    print("-" * 80)
+    
+    time_decay_patterns = []
+    
+    for key, stat in result.pattern_stats.items():
+        if stat.total_occurrences < 10:  # Skip patterns with few occurrences
+            continue
+        
+        acc_7d = stat.accuracy_rate_7d
+        acc_14d = stat.accuracy_rate_14d
+        acc_30d = stat.accuracy_rate_30d
+        
+        # Determine trend: improving or decaying
+        if acc_7d > acc_14d > acc_30d:
+            trend = "↓ Decay"
+        elif acc_7d < acc_14d < acc_30d:
+            trend = "↑ Improve"
+        elif acc_14d > acc_7d and acc_14d > acc_30d:
+            trend = "Peak 14d"
+        else:
+            trend = "Mixed"
+        
+        time_decay_patterns.append({
+            "pattern": key,
+            "acc_7d": acc_7d,
+            "acc_14d": acc_14d,
+            "acc_30d": acc_30d,
+            "trend": trend,
+            "count": stat.total_occurrences
+        })
+        
+        print(f"{key:<35} {acc_7d:>10.1%}  {acc_14d:>10.1%}  {acc_30d:>10.1%}  {trend:<10}")
+    
+    # Summary analysis
+    print("\n\nTime Decay Summary:")
+    print(f"{'Gap':<8} {'Avg Accuracy':<20} {'Min':<10} {'Max':<10} {'Std Dev':<10}")
+    print("-" * 58)
+    
+    if time_decay_patterns:
+        # 7-day stats
+        acc_7d_values = [p["acc_7d"] for p in time_decay_patterns]
+        print(f"{'7d':<8} {np.mean(acc_7d_values):>18.1%}  {np.min(acc_7d_values):>8.1%}  {np.max(acc_7d_values):>8.1%}  {np.std(acc_7d_values):>8.1%}")
+        
+        # 14-day stats
+        acc_14d_values = [p["acc_14d"] for p in time_decay_patterns]
+        print(f"{'14d':<8} {np.mean(acc_14d_values):>18.1%}  {np.min(acc_14d_values):>8.1%}  {np.max(acc_14d_values):>8.1%}  {np.std(acc_14d_values):>8.1%}")
+        
+        # 30-day stats
+        acc_30d_values = [p["acc_30d"] for p in time_decay_patterns]
+        print(f"{'30d':<8} {np.mean(acc_30d_values):>18.1%}  {np.min(acc_30d_values):>8.1%}  {np.max(acc_30d_values):>8.1%}  {np.std(acc_30d_values):>8.1%}")
+        
+        print("\nInterpretation:")
+        avg_7d = np.mean(acc_7d_values)
+        avg_14d = np.mean(acc_14d_values)
+        avg_30d = np.mean(acc_30d_values)
+        
+        if avg_7d > avg_14d > avg_30d:
+            print("  → Pattern predictive power DECAYS over time (best on day 7)")
+        elif avg_7d < avg_14d < avg_30d:
+            print("  → Pattern predictive power IMPROVES over time (best on day 30)")
+        else:
+            print("  → Pattern predictive power is MIXED or VARIABLE")
+    
+    print("\nTop 3 Most Persistent Patterns (high accuracy across all timeframes):")
+    if time_decay_patterns:
+        # Calculate consistency across time horizons
+        for p in time_decay_patterns:
+            p["consistency"] = min(p["acc_7d"], p["acc_14d"], p["acc_30d"])
+        
+        top_patterns = sorted(time_decay_patterns, key=lambda x: x["consistency"], reverse=True)[:3]
+        
+        for i, p in enumerate(top_patterns, 1):
+            print(f"  {i}. {p['pattern']:<30} Accuracy: 7d={p['acc_7d']:.1%}, 14d={p['acc_14d']:.1%}, 30d={p['acc_30d']:.1%} (Count: {p['count']})")
     
     return result
 
-
-# =========================
-# EXAMPLE 6: Focused Pattern Analysis
-# =========================
-
-def example_focused_patterns(stock_code="TCS"):
-    """Analyze only specific patterns of interest."""
-    print("\n" + "="*70)
-    print("EXAMPLE 6: Focused Pattern Analysis (Reversal Patterns)")
-    print("="*70)
-
-    df, _, _ = load_data(stock_code=stock_code)
-
-    # Focus only on reversal patterns
-    reversal_patterns = [
-        "hammer", "hanging_man", "shooting_star",
-        "morning_star", "evening_star"
-    ]
-    
-    result = analyze_candlestick_patterns(
-        df=df,
-        detect_func=detect_candles_claude,
-        stock_name=stock_code,
-        focus_patterns=reversal_patterns,
-        min_conf_threshold=0.60,
-    )
-    
-    print(f"\nAnalyzed {len(reversal_patterns)} reversal patterns")
-    print(f"Found {result.n_patterns_detected} occurrences")
-    
-    # Show results
-    stats_df = pattern_stats_to_dataframe(result)
-    print("\nReversal Pattern Statistics:")
-    print(stats_df.to_string(index=False))
-    
-    return result
 
 
 # =========================
@@ -351,53 +350,6 @@ def example_custom_detection():
     return result
 
 
-# =========================
-# EXAMPLE 8: Detailed Outcome Analysis
-# =========================
-
-def example_detailed_outcomes(stock_code="TCS", pattern_name_focus="evening_star"):
-    """Examine individual pattern outcomes in detail."""
-    print("\n" + "="*70)
-    print("EXAMPLE 8: Detailed Pattern Outcome Analysis")
-    print("="*70)
-
-    df, _, _ = load_data(stock_code=stock_code)
-
-    result = analyze_candlestick_patterns(
-        df=df,
-        detect_func=detect_candles_claude,
-        stock_name=stock_code,
-        min_conf_threshold=0.70,
-    )
-    
-    # Examine outcomes
-    print(f"\nTotal outcomes: {len(result.outcomes)}")
-    
-    # Group by pattern
-    from collections import defaultdict
-    by_pattern = defaultdict(list)
-    for outcome in result.outcomes:
-        by_pattern[outcome.pattern_name].append(outcome)
-    
-    # Show details for most common pattern
-    if by_pattern:
-        # most_common = max(by_pattern.items(), key=lambda x: len(x[1]))
-        most_common = (pattern_name_focus, by_pattern[pattern_name_focus])
-        pattern_name, outcomes = most_common
-        
-        print(f"\nDetailed analysis of '{pattern_name}' ({len(outcomes)} occurrences):")
-        print(f"{'Date':<12} {'Price':<10} {'Conf':<8} {'7d_Price':<12} {'7d_Bullish':<12} {'Return':<10}")
-        print("-" * 64)
-        
-        for i, outcome in enumerate(outcomes[:10]):  # Show first 10
-            ret = ((outcome.price_7d - outcome.pattern_price) / outcome.pattern_price * 100) \
-                  if not np.isnan(outcome.price_7d) else np.nan
-            print(f"{outcome.pattern_date:<12} {outcome.pattern_price:<9.2f} "
-                  f"{outcome.confidence:<8.2f} {outcome.price_7d:<11.2f} "
-                  f"{str(outcome.bullish_7d):<12} {ret:>9.2f}%")
-    
-    return result
-
 
 # =========================
 # MAIN: Run Examples
@@ -410,13 +362,10 @@ if __name__ == "__main__":
     
     # Uncomment examples to run
     
-    # example_single_stock()
-    # example_high_quality_patterns()
-    # example_threshold_tuning()
-    # example_multi_stock()
-    # example_time_decay()
-    # example_focused_patterns()
+    example_single_stock()
+    example_high_quality_patterns()
+    example_multi_stock()
+    example_time_decay()
     # example_custom_detection()
-    # example_detailed_outcomes()
     
     print("\n✓ All examples defined. Uncomment in main() to run.")

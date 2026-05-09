@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BruteQuantLabs | Stock Intelligence</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+
+<body>
+    <nav class="navbar">
+        <a href="#" class="nav-logo">BruteQuantLabs</a>
+        
+        <div class="nav-links" style="display:flex; gap:1rem; margin-left:1rem; overflow-x:auto;">
+            <a href="#sec-peers" class="nav-link" style="color:var(--text-secondary); text-decoration:none; white-space:nowrap; padding: 0.5rem; border-radius: 8px; transition: background 0.2s;">Peers</a>
+            <a href="#sec-quarterly" class="nav-link" style="color:var(--text-secondary); text-decoration:none; white-space:nowrap; padding: 0.5rem; border-radius: 8px; transition: background 0.2s;">Quarterly</a>
+            <a href="#sec-annual" class="nav-link" style="color:var(--text-secondary); text-decoration:none; white-space:nowrap; padding: 0.5rem; border-radius: 8px; transition: background 0.2s;">Annual</a>
+            <a href="#sec-balance" class="nav-link" style="color:var(--text-secondary); text-decoration:none; white-space:nowrap; padding: 0.5rem; border-radius: 8px; transition: background 0.2s;">Balance Sheet</a>
+            <a href="#sec-cash" class="nav-link" style="color:var(--text-secondary); text-decoration:none; white-space:nowrap; padding: 0.5rem; border-radius: 8px; transition: background 0.2s;">Cash Flow</a>
+            <a href="#sec-share-q" class="nav-link" style="color:var(--text-secondary); text-decoration:none; white-space:nowrap; padding: 0.5rem; border-radius: 8px; transition: background 0.2s;">Shareholding (Q)</a>
+            <a href="#sec-share-a" class="nav-link" style="color:var(--text-secondary); text-decoration:none; white-space:nowrap; padding: 0.5rem; border-radius: 8px; transition: background 0.2s;">Shareholding (Y)</a>
+            <a href="#sec-history" class="nav-link" style="color:var(--text-secondary); text-decoration:none; white-space:nowrap; padding: 0.5rem; border-radius: 8px; transition: background 0.2s;">History</a>
+        </div>
+        <div class="search-box">
+            <input type="text" id="search-input" class="search-input" placeholder="Search Markets...">
+            <div id="search-dropdown" class="search-dropdown"></div>
+        </div>
+        <button id="theme-toggle" class="theme-toggle" aria-label="Toggle Theme">
+            <i data-lucide="sun" id="theme-icon"></i>
+        </button>
+    </nav>
+
+    <main class="container">
+        <header class="dashboard-header">
+            <div class="stock-info">
+                <h1 id="stock-name">BruteQuantLabs</h1>
+                <div>
+                    <span id="symbol-badge" class="symbol-badge">---</span>
+                    <span id="industry-label" class="industry-label"></span>
+                </div>
+            </div>
+            <div class="controls-area">
+                <div class="price-display">
+                    <span id="price-now" class="price-now">₹ 0.00</span>
+                    <span id="price-delta" class="price-delta">0.00 (0.00%)</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="main-grid">
+            <!-- Market Chart -->
+            <section class="card">
+                <div class="card-h">
+                    <i data-lucide="line-chart"></i> Trend Analysis
+                </div>
+                <div id="chart-container"></div>
+            </section>
+
+            <!-- Fundamental Stats -->
+            <section class="card">
+                <div class="card-h">
+                    <i data-lucide="activity"></i> Key Fundamentals
+                </div>
+                <div id="metrics-grid" class="metrics-grid"></div>
+            </section>
+        </div>
+
+        <section class="analysis-sec">
+            <div class="card">
+                <div class="card-h" style="color: var(--positive);">
+                    <i data-lucide="check-circle-2"></i> Strengths
+                </div>
+                <ul id="pros-list" class="pros-list"></ul>
+            </div>
+            <div class="card">
+                <div class="card-h" style="color: var(--negative);">
+                    <i data-lucide="alert-circle"></i> Limitations
+                </div>
+                <ul id="cons-list" class="cons-list"></ul>
+            </div>
+        </section>
+
+        <!-- Peer Analysis -->
+        <section id="sec-quarterly" class="card collapsible-section" style="margin-top: 1.5rem;">
+            <div class="card-h collapsible-header" style="cursor:pointer; user-select:none;">
+                <i data-lucide="layout-grid"></i> Peer Comparison
+            <i data-lucide="chevron-down" class="collapse-icon" style="margin-left:auto; transition: transform 0.3s; transform: rotate(-90deg);"></i></div>
+            <div class="table-wrap collapsed-content" style="display:none;">
+                <table id="peers-table">
+                    <thead>
+                        <tr></tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Quarterly Fundamentals Analysis -->
+        <section id="sec-annual" class="card collapsible-section" style="margin-top: 1.5rem;">
+            <div class="card-h collapsible-header" style="cursor:pointer; user-select:none;">
+                <i data-lucide="layout-grid"></i> Quarterly Fundamentals Analysis
+            <i data-lucide="chevron-down" class="collapse-icon" style="margin-left:auto; transition: transform 0.3s; transform: rotate(-90deg);"></i></div>
+            <div class="table-wrap collapsed-content" style="display:none;">
+                <table id="quarterly-table">
+                    <thead>
+                        <tr></tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Annual Fundamentals Analysis -->
+        <section id="sec-balance" class="card collapsible-section" style="margin-top: 1.5rem;">
+            <div class="card-h collapsible-header" style="cursor:pointer; user-select:none;">
+                <i data-lucide="layout-grid"></i> Annual Fundamentals Analysis
+            <i data-lucide="chevron-down" class="collapse-icon" style="margin-left:auto; transition: transform 0.3s; transform: rotate(-90deg);"></i></div>
+            <div class="table-wrap collapsed-content" style="display:none;">
+                <table id="annual-table">
+                    <thead>
+                        <tr></tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Balance Sheet Analysis -->
+        <section id="sec-balance" class="card collapsible-section" style="margin-top: 1.5rem;">
+            <div class="card-h collapsible-header" style="cursor:pointer; user-select:none;">
+                <i data-lucide="layout-grid"></i> Balance Sheet Analysis
+            <i data-lucide="chevron-down" class="collapse-icon" style="margin-left:auto; transition: transform 0.3s; transform: rotate(-90deg);"></i></div>
+            <div class="table-wrap collapsed-content" style="display:none;">
+                <table id="balance-sheet-table">
+                    <thead>
+                        <tr></tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Cash Flow Analysis -->
+        <section id="sec-cash" class="card collapsible-section" style="margin-top: 1.5rem;">
+            <div class="card-h collapsible-header" style="cursor:pointer; user-select:none;">
+                <i data-lucide="layout-grid"></i> Cash Flow Analysis
+            <i data-lucide="chevron-down" class="collapse-icon" style="margin-left:auto; transition: transform 0.3s; transform: rotate(-90deg);"></i></div>
+            <div class="table-wrap collapsed-content" style="display:none;">
+                <table id="cash-flow-table">
+                    <thead>
+                        <tr></tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </section>
+
+
+        <!-- Shareholding Quarterly Pattern -->
+        <section id="sec-share-q" class="card collapsible-section" style="margin-top: 1.5rem;">
+            <div class="card-h collapsible-header" style="cursor:pointer; user-select:none;">
+                <i data-lucide="layout-grid"></i> Shareholding Quarterly Pattern
+            <i data-lucide="chevron-down" class="collapse-icon" style="margin-left:auto; transition: transform 0.3s; transform: rotate(-90deg);"></i></div>
+            <div class="table-wrap collapsed-content" style="display:none;">
+                <table id="shareholding-quarterly-table">
+                    <thead>
+                        <tr></tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Shareholding Annual Pattern -->
+        <section id="sec-share-a" class="card collapsible-section" style="margin-top: 1.5rem;">
+            <div class="card-h collapsible-header" style="cursor:pointer; user-select:none;">
+                <i data-lucide="layout-grid"></i> Shareholding Annual Pattern
+            <i data-lucide="chevron-down" class="collapse-icon" style="margin-left:auto; transition: transform 0.3s; transform: rotate(-90deg);"></i></div>
+            <div class="table-wrap collapsed-content" style="display:none;">
+                <table id="shareholding-yearly-table">
+                    <thead>
+                        <tr></tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </section>
+
+
+        <!-- Historical Prices Table -->
+        <section id="sec-history" class="card collapsible-section" style="margin-top: 1.5rem;">
+            <div class="card-h collapsible-header" style="cursor:pointer; user-select:none;" style="justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 0.8rem;">
+                    <i data-lucide="history"></i> Historical Prices
+                </div>
+                <select id="timeframe-select" class="timeframe-select">
+                    <option value="1W">1 Week</option>
+                    <option value="1M" selected>1 Month</option>
+                    <option value="3M">3 Months</option>
+                    <option value="6M">6 Months</option>
+                    <option value="1Y">1 Year</option>
+                    <option value="ALL">All Time</option>
+                </select>
+            <i data-lucide="chevron-down" class="collapse-icon" style="margin-left:auto; transition: transform 0.3s; transform: rotate(-90deg);"></i></div>
+            <div class="table-wrap collapsed-content" style="display:none;" style="max-height: 400px; overflow-y: auto;">
+                <table id="history-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Close</th>
+                            <th>High</th>
+                            <th>Low</th>
+                            <th>Volume</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="js/dashboard.js"></script>
+    <script>
+        window.addEventListener('load', () => {
+            if (window.lucide) window.lucide.createIcons();
+        });
+    </script>
+</body>
+
+</html>

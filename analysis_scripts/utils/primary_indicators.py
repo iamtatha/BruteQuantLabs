@@ -30,15 +30,17 @@ def add_vwap(df):
 def add_rsi(df, period=14):
     delta = df["close"].diff()
 
-    gain = np.where(delta > 0, delta, 0)
-    loss = np.where(delta < 0, -delta, 0)
+    gain = delta.clip(lower=0)
+    loss = (-delta).clip(lower=0)
 
-    avg_gain = pd.Series(gain).rolling(period).mean()
-    avg_loss = pd.Series(loss).rolling(period).mean()
+    avg_gain = gain.rolling(window=period, min_periods=period).mean()
+    avg_loss = loss.rolling(window=period, min_periods=period).mean()
 
     rs = avg_gain / (avg_loss + 1e-9)
-    df["rsi"] = 100 - (100 / (1 + rs))
-
+    rsi = 100 - (100 / (1 + rs))
+    
+    df["rsi"] = rsi.values  # Use .values to avoid index mismatch
+    
     return df
 
 
@@ -261,7 +263,13 @@ def plot_with_indicators(df, indicators=None):
 
     # Default: no indicators
     if indicators is None:
-        indicators = []
+        indicators = [
+            "sma", "ema", "vwap",
+            "rsi", "macd", "roc", "stochastic",
+            "obv", "mfi", "ad",
+            "atr", "bollinger",
+            "pivot", "fibonacci"
+        ]
 
     apds = []
     panel_id = 1  # 0 = main candle panel
@@ -317,19 +325,24 @@ def plot_with_indicators(df, indicators=None):
     # =========================
     # Plot
     # =========================
-    fig, axlist = mpf.plot(
-        df_plot,
-        type="candle",
-        style="charles",
-        addplot=apds if len(apds) > 0 else None,
-        figsize=(14, 8),
-        datetime_format="%Y-%m-%d",
-        xrotation=45,
-        returnfig=True
-    )
+    # Build kwargs conditionally
+    plot_kwargs = {
+        "data": df_plot,
+        "type": "candle",
+        "style": "charles",
+        "figsize": (14, 8),
+        "datetime_format": "%Y-%m-%d",
+        "xrotation": 45,
+        "returnfig": True
+    }
+    
+    # Only add addplot if we have indicators
+    if len(apds) > 0:
+        plot_kwargs["addplot"] = apds
+    
+    fig, axlist = mpf.plot(**plot_kwargs)
 
     return fig
-
 
 
 

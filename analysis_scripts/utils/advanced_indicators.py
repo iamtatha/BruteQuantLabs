@@ -67,6 +67,90 @@ def add_supertrend(df, period=10, multiplier=3):
     return df
 
 
+def calculate_supertrend(df, basic_upper_col='basic_upper', basic_lower_col='basic_lower', close_col='close'):
+    """
+    Calculate Supertrend indicator from basic upper and lower bands.
+    
+    Parameters:
+    -----------
+    df : pd.DataFrame
+        DataFrame containing OHLC data and basic bands
+    basic_upper_col : str
+        Column name for basic upper band
+    basic_lower_col : str
+        Column name for basic lower band
+    close_col : str
+        Column name for close price
+    
+    Returns:
+    --------
+    pd.DataFrame
+        Original dataframe with added columns:
+        - final_upper: Final upper band
+        - final_lower: Final lower band
+        - supertrend: Supertrend line
+        - supertrend_direction: 1 for uptrend, -1 for downtrend
+    """
+    df = df.copy()
+    
+    # Initialize arrays
+    final_upper = [0.0] * len(df)
+    final_lower = [0.0] * len(df)
+    supertrend = [0.0] * len(df)
+    direction = [1] * len(df)  # 1 = UP, -1 = DOWN
+    
+    # First row initialization
+    final_upper[0] = df[basic_upper_col].iloc[0]
+    final_lower[0] = df[basic_lower_col].iloc[0]
+    supertrend[0] = final_upper[0]
+    direction[0] = -1  # Start with downtrend
+    
+    # Calculate for each row
+    for i in range(1, len(df)):
+        close_prev = df[close_col].iloc[i-1]
+        close_curr = df[close_col].iloc[i]
+        basic_upper_curr = df[basic_upper_col].iloc[i]
+        basic_lower_curr = df[basic_lower_col].iloc[i]
+        
+        # Step 2: Calculate Final Bands
+        # Final Upper
+        if basic_upper_curr < final_upper[i-1] or close_prev > final_upper[i-1]:
+            final_upper[i] = basic_upper_curr
+        else:
+            final_upper[i] = final_upper[i-1]
+        
+        # Final Lower
+        if basic_lower_curr > final_lower[i-1] or close_prev < final_lower[i-1]:
+            final_lower[i] = basic_lower_curr
+        else:
+            final_lower[i] = final_lower[i-1]
+        
+        # Step 3: Determine Supertrend and Direction
+        # Check if trend should change
+        if direction[i-1] == -1:  # Was in downtrend
+            if close_curr > final_upper[i]:
+                direction[i] = 1  # Switch to uptrend
+                supertrend[i] = final_lower[i]
+            else:
+                direction[i] = -1  # Stay in downtrend
+                supertrend[i] = final_upper[i]
+        else:  # Was in uptrend
+            if close_curr < final_lower[i]:
+                direction[i] = -1  # Switch to downtrend
+                supertrend[i] = final_upper[i]
+            else:
+                direction[i] = 1  # Stay in uptrend
+                supertrend[i] = final_lower[i]
+    
+    # Add to dataframe
+    df['final_upper'] = final_upper
+    df['final_lower'] = final_lower
+    df['supertrend'] = supertrend
+    df['supertrend_direction'] = direction
+    
+    return df
+
+
 # =========================
 # ⚡ MOMENTUM (ADVANCED)
 # =========================
@@ -263,7 +347,7 @@ def add_advanced_indicators(df, indicators=None):
 
 
 
-def plot_with_indicators(df, indicators=None):
+def plot_with_advanced_indicators(df, indicators=None):
     df_plot = df.copy()
 
     # Rename for mplfinance

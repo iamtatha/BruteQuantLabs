@@ -455,11 +455,11 @@ def detect_candles_claude(df, **thresholds):
     # =========================
     
     # Trend (EMA + slope)
-    df["ema20"] = df["close"].ewm(span=20).mean()
+    df["ema20"] = df["close"].ewm(span=20, adjust=False).mean()
     df["ema_slope"] = df["ema20"].diff()
     
     # Trend strength (normalized slope)
-    atr14 = df["range"].rolling(14).mean()
+    atr14 = df["range"].rolling(window=14, min_periods=1).mean()
     df["ema_slope_normalized"] = df["ema_slope"] / atr14
     
     df["uptrend"] = (df["close"] > df["ema20"]) & (df["ema_slope"] > 0)
@@ -471,7 +471,7 @@ def detect_candles_claude(df, **thresholds):
     
     # Support / Resistance (dynamic zones)
     window = 20
-    df["recent_low"] = df["low"].rolling(window).min()
+    df["recent_low"] = df["low"].rolling(window=20, min_periods=1).min()
     df["recent_high"] = df["high"].rolling(window).max()
     df["recent_mid"] = (df["recent_low"] + df["recent_high"]) / 2
     
@@ -485,7 +485,7 @@ def detect_candles_claude(df, **thresholds):
     
     # Momentum (RSI-inspired, normalized price change)
     df["momentum"] = df["close"].diff() / df["atr14"]
-    df["momentum_ma"] = df["momentum"].rolling(5).mean()
+    df["momentum_ma"] = df["momentum"].rolling(window=5, min_periods=1).mean()
     
     # =========================
     # HELPER FUNCTION: Confidence Scorer
@@ -1165,8 +1165,7 @@ def plot_with_annotations(df):
 
 
 
-
-def plot_valid_signals(df, conf_threshold=0.5):
+def plot_valid_signals(df, conf_threshold=0.5, fig=None, axlist=None):
     df_plot = df.copy()
 
     df_plot = df_plot.rename(columns={
@@ -1270,14 +1269,17 @@ def plot_valid_signals(df, conf_threshold=0.5):
             )
         )
 
-    fig, axlist = mpf.plot(
-        df_plot,
-        type="candle",
-        style="charles",
-        addplot=apds,
-        figsize=(14, 7),
-        returnfig=True
-    )
+    if fig is None:
+        fig, axlist = mpf.plot(
+            df_plot,
+            type="candle",
+            style="charles",
+            addplot=apds,
+            figsize=(14, 7),
+            datetime_format="%Y-%m-%d",
+            xrotation=45,
+            returnfig=True
+        )
 
     ax = axlist[0]
 
@@ -1311,7 +1313,7 @@ def plot_valid_signals(df, conf_threshold=0.5):
             )
         )
 
-    return fig
+    return fig, axlist
 
 
 
