@@ -24,6 +24,7 @@ from matplotlib.gridspec import GridSpec
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
+import os
 import seaborn as sns
 from typing import List, Dict, Any, Optional
 from matplotlib.backends.backend_pdf import PdfPages
@@ -259,18 +260,23 @@ class StrategyVisualizer:
         """Display performance metrics as a table"""
         ax.axis('off')
         
+        def fmt(value, decimals=2, prefix='', suffix=''):
+            if value is None or (isinstance(value, float) and not np.isfinite(value)):
+                return 'N/A'
+            return f"{prefix}{value:.{decimals}f}{suffix}"
+        
         metrics = [
             ['Metric', 'Value'],
-            ['Total Return', f"{self.results.get('total_return_pct', 0):.2f}%"],
-            ['Annualized Return', f"{self.results.get('annualized_return_pct', 0):.2f}%"],
-            ['Sharpe Ratio', f"{self.results.get('sharpe_ratio', 0):.2f}"],
-            ['Max Drawdown', f"{self.results.get('max_drawdown_pct', 0):.2f}%"],
-            ['Win Rate', f"{self.results.get('win_rate', 0):.2f}%"],
-            ['Profit Factor', f"{self.results.get('profit_factor', 0):.2f}"],
-            ['Total Trades', f"{self.results.get('total_trades', 0)}"],
-            ['Avg Win', f"₹{self.results.get('avg_win', 0):.2f}"],
-            ['Avg Loss', f"₹{self.results.get('avg_loss', 0):.2f}"],
-        ]
+            ['Total Return', fmt(self.results.get('total_return_pct', 0), suffix='%')],
+            ['Annualized Return', fmt(self.results.get('annualized_return_pct', 0), suffix='%')],
+            ['Sharpe Ratio', fmt(self.results.get('sharpe_ratio'))],
+            ['Max Drawdown', fmt(self.results.get('max_drawdown_pct', 0), suffix='%')],
+            ['Win Rate', fmt(self.results.get('win_rate', 0), suffix='%')],
+            ['Profit Factor', fmt(self.results.get('profit_factor', 0))],
+            ['Total Trades', str(self.results.get('total_trades', 0))],
+            ['Avg Win', fmt(self.results.get('avg_win', 0), prefix='₹')],
+            ['Avg Loss', fmt(self.results.get('avg_loss', 0), prefix='₹')],
+    ]
         
         table = ax.table(cellText=metrics, 
                         cellLoc='left',
@@ -795,6 +801,7 @@ def visualize_backtest_results(df: pd.DataFrame,
                                show_equity: bool = False,
                                show_trades: bool = False,
                                save_pdf: bool = True,
+                               base_path: str =None,
                                save_prefix: Optional[str] = None):
     """
     Convenience function to generate all visualizations as PDF
@@ -824,8 +831,14 @@ def visualize_backtest_results(df: pd.DataFrame,
     viz = StrategyVisualizer(df, results, strategy_name)
     
     # ONLY creates one comprehensive PDF
+    if base_path is None:
+        base_path = "research_indicators/strategy_reports"
+    
+    if not os.path.exists(base_path):
+        os.makedirs(base_path)
+        
     if save_prefix:
-        pdf_path = f"research_indicators/strategy_reports/{save_prefix}_full_report.pdf"
+        pdf_path = f"{base_path}/{save_prefix}.pdf"
     else:
         pdf_path = None
     

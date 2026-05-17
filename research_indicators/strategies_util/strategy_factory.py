@@ -10,6 +10,14 @@ import math
 import datetime
 
 
+
+
+
+
+
+
+
+
 def create_strategy_from_config(config: StrategyConfig):
     """
     Dynamically create a strategy class from a StrategyConfig
@@ -32,6 +40,7 @@ def create_strategy_from_config(config: StrategyConfig):
             # Store configuration
             self.config = config
             self.strategy_name = config.name
+            self.logger = config.logger
             
             # Initialize indicators from config
             for name, ind_config in config.indicators.items():
@@ -49,13 +58,49 @@ def create_strategy_from_config(config: StrategyConfig):
             if not config.buy_conditions:
                 return False
             
+            # Evaluate each condition and log
+            results = []
+            for i, condition in enumerate(config.buy_conditions, 1):
+                try:
+                    result = condition(self)
+                    results.append(result)
+                    # Log each condition result
+                    if not result:
+                        # This condition failed - log it
+                        pass  # Uncomment below to see which conditions fail
+                        # self.log(f'  Buy Condition {i}: FALSE', do_print=False)
+                except Exception as e:
+                    self.log(f'  Buy Condition {i}: ERROR - {e}')
+                    results.append(False)
+            
             # All conditions must be True
-            return all(condition(self) for condition in config.buy_conditions)
-        
+            all_true = all(results)
+            
+            if all_true:
+                # Log which conditions triggered
+                self.log(f'BUY SIGNAL: All {len(results)} conditions met')
+                for i in range(len(results)):
+                    self.log(f'Condition {i+1}: TRUE')
+            
+            return all_true
+
         def sell_signal(self) -> bool:
             """Evaluate all sell conditions"""
             if not config.sell_conditions:
                 return False
+            
+            # Evaluate each condition and log which one triggers
+            for i, condition in enumerate(config.sell_conditions, 1):
+                try:
+                    result = condition(self)
+                    if result:
+                        # This condition triggered the sell - log it
+                        self.log(f'SELL SIGNAL: Condition {i} triggered')
+                        return True
+                except Exception as e:
+                    self.log(f'  Sell Condition {i}: ERROR - {e}')
+            
+            return False
             
             # Any condition can be True
             return any(condition(self) for condition in config.sell_conditions)
@@ -106,6 +151,7 @@ def create_strategy_from_config(config: StrategyConfig):
 
 
 def create_custom_strategy(name: str, 
+                           logger,
                           indicators: dict,
                           buy_conditions: list,
                           sell_conditions: list,
@@ -140,7 +186,7 @@ def create_custom_strategy(name: str,
         ...     position_size_pct=0.95
         ... )
     """
-    config = StrategyConfig(name)
+    config = StrategyConfig(name, logger)
     
     # Add indicators
     for ind_name, (ind_class, ind_params) in indicators.items():

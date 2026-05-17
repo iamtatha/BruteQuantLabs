@@ -6,6 +6,10 @@ All trading strategies should inherit from this class
 import backtrader as bt
 import math
 from typing import Dict, List, Any, Optional
+import sys
+
+sys.stdout.reconfigure(encoding='utf-8')
+sys.stderr.reconfigure(encoding='utf-8')
 
 
 class BaseStrategy(bt.Strategy):
@@ -52,7 +56,9 @@ class BaseStrategy(bt.Strategy):
             
         if do_print:
             dt = dt or self.datas[0].datetime.date(0)
-            print(f'{dt.isoformat()}, {txt}')
+            printing_text = f'{dt.isoformat()}, {txt}'
+            self.logger.info(printing_text)
+            # print(printing_text)
         return dt
     
     def add_to_journal(self, order: bt.Order):
@@ -113,10 +119,10 @@ class BaseStrategy(bt.Strategy):
         
         if order.status in [order.Completed]:
             if order.isbuy():
-                self.log(f'BUY EXECUTED, Price: {order.executed.price:.2f}, '
-                        f'Size: {self.position.size}, '
-                        f'Cost: {order.executed.price * self.position.size:.2f}, '
-                        f'Comm: {order.executed.comm:.2f}')
+                self.log(f'BUY EXECUTED,   Price: {order.executed.price:.2f}, '
+                        f'   Size: {self.position.size}, '
+                        f'   Cost: {order.executed.price * self.position.size:.2f}, '
+                        f'   Comm: {order.executed.comm:.2f}')
                 
                 self.buy_price = order.executed.price
                 self.buy_size = self.position.size
@@ -124,10 +130,10 @@ class BaseStrategy(bt.Strategy):
                 self.add_to_journal(order)
                 
             elif order.issell():
-                self.log(f'SELL EXECUTED, Price: {order.executed.price:.2f}, '
-                        f'Size: {self.qty_sell_track}, '
-                        f'Cost: {order.executed.price * self.qty_sell_track:.2f}, '
-                        f'Comm: {order.executed.comm:.2f}')
+                self.log(f'SELL EXECUTED,   Price: {order.executed.price:.2f}, '
+                        f'   Size: {self.qty_sell_track}, '
+                        f'   Cost: {order.executed.price * self.qty_sell_track:.2f}, '
+                        f'   Comm: {order.executed.comm:.2f}')
                 
                 self.add_to_journal(order)
                 last_buy_date = self.get_last_buy_date()
@@ -144,9 +150,9 @@ class BaseStrategy(bt.Strategy):
                 profit_pct = (profit / self.log_buy) * 100 if self.log_buy > 0 else 0
                 
                 if profit > 0:
-                    self.log(f'TRADE PROFIT: ₹{profit:.2f} ({profit_pct:.2f}%)')
+                    self.log(f'TRADE PROFIT: Rs.{profit:.2f} ({profit_pct:.2f}%)')
                 else:
-                    self.log(f'TRADE LOSS: ₹{profit:.2f} ({profit_pct:.2f}%)')
+                    self.log(f'TRADE LOSS: Rs.{profit:.2f} ({profit_pct:.2f}%)')
                 
                 self.log_sell = 0
                 self.buy_price = None
@@ -224,7 +230,7 @@ class BaseStrategy(bt.Strategy):
         
         self.log('=' * 50, do_print=True)
         self.log(f'Strategy: {self.__class__.__name__}', do_print=True)
-        self.log(f'Total Return: ₹{total_return:.2f} ({total_return_pct:.2f}%)', do_print=True)
+        self.log(f'Total Return: Rs.{total_return:.2f} ({total_return_pct:.2f}%)', do_print=True)
         if annualized_return_pct is not None:
             self.log(f'Annualized Return: {annualized_return_pct:.2f}%', do_print=True)
         else:
@@ -264,12 +270,12 @@ class BaseStrategy(bt.Strategy):
     
     def execute_buy(self):
         """Execute buy order - can be overridden for custom buy logic"""
-        self.log(f'BUY CREATE, Close: {self.dataclose[0]:.2f}')
+        self.log(f'BUY CREATE,   Close: {self.dataclose[0]:.2f}')
         self.order = self.buy()
     
     def execute_sell(self):
         """Execute sell order - can be overridden for custom sell logic"""
-        self.log(f'SELL CREATE, Close: {self.dataclose[0]:.2f}')
+        self.log(f'SELL CREATE,   Close: {self.dataclose[0]:.2f}')
         qty_to_sell = self.position.size
         if qty_to_sell > 0:
             self.qty_sell_track = qty_to_sell

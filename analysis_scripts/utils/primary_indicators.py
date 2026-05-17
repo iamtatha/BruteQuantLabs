@@ -6,8 +6,11 @@ import mplfinance as mpf
 # 📈 MOVING AVERAGES
 # =========================
 
-def add_sma(df, period=20):
-    df[f"sma_{period}"] = df["close"].rolling(period).mean()
+def add_sma(df, period=20, col="close"):
+    if col == "volume":
+        df[f"sma_{col}"] = df[col].rolling(period).mean()
+        return df
+    df[f"sma_{period}"] = df[col].rolling(period).mean()
     return df
 
 
@@ -194,9 +197,14 @@ def add_indicators(df, indicators=None):
 
     if "sma" in indicators:
         df = add_sma(df)
+        df = add_sma(df, period=50)
+        df = add_sma(df, period=200)
+        df = add_sma(df, col="volume")
 
     if "ema" in indicators:
         df = add_ema(df)
+        df = add_ema(df, period=7)
+        df = add_ema(df, period=33)
 
     if "vwap" in indicators:
         df = add_vwap(df)
@@ -264,15 +272,25 @@ def plot_with_indicators(df, indicators=None):
     # Default: no indicators
     if indicators is None:
         indicators = [
-            "sma", "ema", "vwap",
-            "rsi", "macd", "roc", "stochastic",
-            "obv", "mfi", "ad",
-            "atr", "bollinger",
-            "pivot", "fibonacci"
+            "sma_20", "ema_20", "vwap",
+            "rsi", "macd", "macd_signal", "macd_hist", 
+            "roc_12", "stoch_k", "stoch_d",
+            "obv", "mfi", "ad_line",
+            "atr", 
+            "bb_middle", "bb_upper", "bb_lower",
+            "pivot", "r1", "s1", 
+            "fib_0.236", "fib_0.382", "fib_0.5", "fib_0.618"
         ]
 
     apds = []
-    panel_id = 1  # 0 = main candle panel
+
+    # Color palette for indicators
+    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', 
+              '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
+    color_idx = 0
+
+    # Calculate average price for normalization
+    price_avg = df_plot['Close'].mean()
 
     # =========================
     # Categorize indicators
@@ -287,25 +305,37 @@ def plot_with_indicators(df, indicators=None):
 
         # Heuristic: price-like indicators → overlay
         if any(key in col.lower() for key in [
-            "ema", "sma", "vwap", "bb_", "kc_", "donchian"
+            "ema", "sma", "bb_", "kc_", "donchian"
         ]):
             overlay_indicators.append(col)
         else:
             separate_indicators.append(col)
 
     # =========================
-    # Overlay indicators
+    # Overlay indicators (price-like, no scaling needed)
     # =========================
     for col in overlay_indicators:
+        series = df_plot[col].dropna()
+        if len(series) > 0:
+            min_val = series.min()
+            max_val = series.max()
+            label = f"{col} [{min_val:.2f} - {max_val:.2f}]"
+        else:
+            label = col
+            
         apds.append(
             mpf.make_addplot(
                 df_plot[col],
-                panel=0
+                panel=0,  # Same panel as candlesticks
+                label=label,
+                color=colors[color_idx % len(colors)],
+                alpha=0.5,
             )
         )
+        color_idx += 1
 
     # =========================
-    # Separate panel indicators
+    # Other indicators (NORMALIZED to price avg, OVERLAID on panel 0)
     # =========================
     for col in separate_indicators:
         series = df_plot[col]
@@ -314,13 +344,52 @@ def plot_with_indicators(df, indicators=None):
         if series.isna().all():
             continue
 
+        # Store original range for label
+        series_clean = series.dropna()
+        if len(series_clean) > 0:
+            min_val = series_clean.min()
+            max_val = series_clean.max()
+            indicator_avg = series_clean.mean()
+            
+            # Get price range for normalization
+            price_min = df_plot['Close'].min()
+            price_max = df_plot['Close'].max()
+            price_range = price_max - price_min
+            
+            # Target range: 10% of price range
+            target_range = 1.1 * price_range
+            
+            # Calculate scaling factor to match price average
+            if indicator_avg != 0 and max_val != min_val:
+                # First scale to match average
+                scale_factor = price_avg / indicator_avg
+                normalized = series * scale_factor
+                
+                # Then compress to 10% of price range
+                normalized_range = normalized.max() - normalized.min()
+                if normalized_range > 0:
+                    compression_factor = target_range / normalized_range
+                    normalized = (normalized - normalized.mean()) * compression_factor + price_avg
+                
+                label = f"{col} [orig: {min_val:.2f} - {max_val:.2f}]"
+            else:
+                normalized = series
+                label = f"{col} [orig: {min_val:.2f} - {max_val:.2f}]"
+        else:
+            label = col
+            normalized = series
+
         apds.append(
             mpf.make_addplot(
-                series,
-                panel=panel_id
+                normalized,
+                panel=0,  # OVERLAY on main candlestick panel
+                label=label,
+                color=colors[color_idx % len(colors)],
+                secondary_y=False,
+                alpha=0.5,
             )
         )
-        panel_id += 1
+        color_idx += 1
 
     # =========================
     # Plot
@@ -333,7 +402,7 @@ def plot_with_indicators(df, indicators=None):
         "figsize": (14, 8),
         "datetime_format": "%Y-%m-%d",
         "xrotation": 45,
-        "returnfig": True
+        "returnfig": True,
     }
     
     # Only add addplot if we have indicators
@@ -341,6 +410,9 @@ def plot_with_indicators(df, indicators=None):
         plot_kwargs["addplot"] = apds
     
     fig, axlist = mpf.plot(**plot_kwargs)
+    
+    # Add legend to main panel
+    axlist[0].legend(loc='upper left', fontsize=8)
 
     return fig
 

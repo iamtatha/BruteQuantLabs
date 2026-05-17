@@ -13,8 +13,9 @@ class StrategyConfig:
     Configuration class for defining trading strategies
     """
     
-    def __init__(self, name: str):
+    def __init__(self, name: str, logger):
         self.name = name
+        self.logger = logger
         self.indicators = {}
         self.buy_conditions = []
         self.sell_conditions = []

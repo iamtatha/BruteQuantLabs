@@ -17,6 +17,7 @@ from research_indicators.strategies_util.base_strategy import BaseStrategy
 from research_indicators.strategies_util.strategy_configs import get_strategy_config, list_available_strategies
 from research_indicators.strategies_util.strategy_factory import create_strategy_from_config
 from research_indicators.strategies_util.enhanced_visualizations import visualize_backtest_results
+from research_indicators.strategies_util.custom_data_feed import ExtendedPandasData
 
 
 class FixedCommission(bt.CommInfoBase):
@@ -86,6 +87,8 @@ class BacktestEngine:
                     strategy_params: Optional[Dict] = None,
                     plot: bool = False,
                     enhanced_plot: bool = False,
+                    save_prefix: str = None,
+                    base_path: str = None,
                     verbose: bool = True) -> Dict[str, Any]:
         """
         Run a single strategy backtest
@@ -178,7 +181,9 @@ class BacktestEngine:
                     show_all=True,
                     show_equity=True,
                     show_trades=True,
-                    save_pdf=True        # Save as PDF
+                    base_path=base_path,
+                    save_pdf=True,        # Save as PDF
+                    save_prefix=save_prefix,
                 )
             except ImportError:
                 print("Enhanced visualizations not available. Install required packages or use plot=True for basic plotting.")
@@ -388,6 +393,8 @@ def run_backtest(stock_code: str,
                  normalized_mode: bool = False,  # ← New parameter
                  plot: bool = True,
                  enhanced_plot: bool = True,
+                 base_path: str = None,
+                 save_prefix: str = None,
                  **strategy_params):
     """
     Convenience function to run a single backtest
@@ -408,7 +415,7 @@ def run_backtest(stock_code: str,
     """
     # Load data
     df, dates, cols = data_loader_func(stock_code, years=years)
-    feed = bt.feeds.PandasData(dataname=df)
+    feed = ExtendedPandasData(dataname=df)
     
     # Get strategy
     config = get_strategy_config(strategy_name)
@@ -428,7 +435,8 @@ def run_backtest(stock_code: str,
         data_feed=feed,
         strategy_params=strategy_params,
         plot=plot,
-        enhanced_plot=enhanced_plot,
+        enhanced_plot=enhanced_plot,\
+        save_prefix=save_prefix,
         verbose=True
     )
     return results
